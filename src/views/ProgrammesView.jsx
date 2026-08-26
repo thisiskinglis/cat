@@ -26,21 +26,27 @@ export default function ProgrammesView({ onAction }) {
           ENDING
         </h3>
         <div className="flex gap-3">
-          <button
-            onClick={() => onAction('Programme opened')}
-            className="tap flex-1 h-[46px] rounded-full bg-white text-black text-[13px] font-[600]"
-          >
-            VIEW
-          </button>
-          <button
-            onClick={() => onAction('PDF downloaded — Change The Ending')}
-            className="tap flex-1 h-[46px] rounded-full border border-white/20 text-white text-[13px] font-[600] bg-white/5"
-          >
-            DOWNLOAD
-          </button>
-        </div>
-        <div className="absolute -bottom-[40px] -right-[20px] w-[180px] h-[180px] rounded-full bg-white/5 blur-[30px]" />
-      </div>
+  <button
+    onClick={() =>
+      window.open(
+        '/programmes/change-the-ending.pdf',
+        '_blank',
+        'noopener,noreferrer'
+      )
+    }
+    className="tap flex-1 h-[46px] rounded-full bg-white text-black text-[13px] font-[600]"
+  >
+    VIEW
+  </button>
+
+  <a
+    href="/programmes/change-the-ending.pdf"
+    download="Change-The-Ending.pdf"
+    className="tap flex-1 h-[46px] rounded-full border border-white/20 text-white text-[13px] font-[600] bg-white/5 flex items-center justify-center"
+  >
+    DOWNLOAD
+  </a>
+</div>
 
       <div className="mt-8 flex items-center justify-between">
         <span className="text-[11px] tracking-[0.16em] font-[600] text-black/30">PAST PROGRAMMES</span>
