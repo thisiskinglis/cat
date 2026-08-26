@@ -445,70 +445,69 @@ export default function App() {
    */
 
   return (
-    <div className="min-h-screen w-full bg-[#EDEDED] flex justify-center selection:bg-black selection:text-white overflow-x-hidden">
+  <div className="fixed inset-0 w-full h-[100dvh] bg-[#EDEDED] flex justify-center selection:bg-black selection:text-white overflow-hidden">
+    <div className="w-full max-w-[480px] h-[100dvh] bg-white relative flex flex-col shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_20px_80px_rgba(0,0,0,0.12)] overflow-hidden">
 
-      <div className="w-full max-w-[480px] min-h-screen bg-white relative flex flex-col shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_20px_80px_rgba(0,0,0,0.12)] overflow-hidden overflow-x-hidden">
+      <Header memberNo={memberNo} />
 
-        <Header memberNo={memberNo} />
-
+      <div
+        ref={scrollRef}
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-none scrollbar-none relative bg-white"
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          touchAction: 'pan-y',
+        }}
+      >
         <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none relative bg-white"
+          key={activeTab}
+          className="min-h-full"
+          style={{
+            animation: `${
+              prevTab !== activeTab
+                ? 'slideUp'
+                : 'fadeIn'
+            } 0.38s cubic-bezier(0.16,1,0.3,1)`,
+          }}
         >
+          {activeTab === 'home' && (
+            <HomeView
+              memberNo={memberNo}
+              onAction={showToast}
+            />
+          )}
 
-          <div
-            key={activeTab}
-            className="min-h-full"
-            style={{
-              animation: `${
-                prevTab !== activeTab
-                  ? 'slideUp'
-                  : 'fadeIn'
-              } 0.38s cubic-bezier(0.16,1,0.3,1)`,
-            }}
-          >
+          {activeTab === 'card' && (
+            <CardView
+              memberNo={memberNo}
+              onAction={showToast}
+            />
+          )}
 
-            {activeTab === 'home' && (
-              <HomeView
-                memberNo={memberNo}
-                onAction={showToast}
-              />
-            )}
+          {activeTab === 'programmes' && (
+            <ProgrammesView
+              onAction={showToast}
+            />
+          )}
 
-            {activeTab === 'card' && (
-              <CardView
-                memberNo={memberNo}
-                onAction={showToast}
-              />
-            )}
-
-            {activeTab === 'programmes' && (
-              <ProgrammesView
-                onAction={showToast}
-              />
-            )}
-
-            {activeTab === 'perks' && (
-              <PerksView
-                copied={copied}
-                onCopy={copyCode}
-                notifOn={notifOn}
-                setNotifOn={setNotifOn}
-                onAction={showToast}
-              />
-            )}
-
-          </div>
+          {activeTab === 'perks' && (
+            <PerksView
+              copied={copied}
+              onCopy={copyCode}
+              notifOn={notifOn}
+              setNotifOn={setNotifOn}
+              onAction={showToast}
+            />
+          )}
         </div>
-
-        <BottomNav
-          activeTab={activeTab}
-          onNavigate={navigate}
-        />
-
-        <Toast message={toast} />
-
       </div>
+
+      <BottomNav
+        activeTab={activeTab}
+        onNavigate={navigate}
+      />
+
+      <Toast message={toast} />
+
     </div>
-  );
-}
+  </div>
+);
