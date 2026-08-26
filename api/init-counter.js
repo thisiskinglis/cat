@@ -1,5 +1,3 @@
-import { Redis } from '@upstash/redis/cloudflare';
-
 export default async function handleInitCounter(request, env) {
   if (request.method !== 'POST') {
     return Response.json(
@@ -10,10 +8,7 @@ export default async function handleInitCounter(request, env) {
 
   const suppliedKey = request.headers.get('x-setup-key');
 
-  if (
-    !env.COUNTER_SETUP_KEY ||
-    suppliedKey !== env.COUNTER_SETUP_KEY
-  ) {
+  if (!env.COUNTER_SETUP_KEY || suppliedKey !== env.COUNTER_SETUP_KEY) {
     return Response.json(
       { error: 'Unauthorized' },
       { status: 401 }
@@ -22,20 +17,50 @@ export default async function handleInitCounter(request, env) {
 
   if (!env.KV_REST_API_URL || !env.KV_REST_API_TOKEN) {
     return Response.json(
-      { error: 'Upstash configuration missing' },
+      { error: 'Upstash variables missing in Cloudflare' },
       { status: 500 }
     );
   }
 
-  const redis = new Redis({
-    url: env.KV_REST_API_URL,
-    token: env.KV_REST_API_TOKEN,
-  });
+  const redisCommand = async (command) => {
+    const response = await fetch(env.KV_REST_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.KV_REST_API_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(command),
+    });
+
+    const text = await response.text();
+
+    if (!response.ok) {
+      throw new Error(
+        `Upstash HTTP ${response.status}: ${text}`
+      );
+    }
+
+    let data;
+
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Invalid Upstash response: ${text}`);
+    }
+
+    if (data.error) {
+      throw new Error(`Upstash error: ${data.error}`);
+    }
+
+    return data.result;
+  };
 
   try {
-    const existing = await redis.get('member-counter');
+    const existing = await redisCommand([
+      'GET',
+      'member-counter',
+    ]);
 
-    // Safety: never overwrite an existing counter.
     if (existing !== null && existing !== undefined) {
       return Response.json({
         changed: false,
@@ -44,18 +69,30 @@ export default async function handleInitCounter(request, env) {
       });
     }
 
-    await redis.set('member-counter', 5);
+    await redisCommand([
+      'SET',
+      'member-counter',
+      '5',
+    ]);
+
+    const confirmed = await redisCommand([
+      'GET',
+      'member-counter',
+    ]);
 
     return Response.json({
       changed: true,
-      currentCounter: 5,
+      currentCounter: Number(confirmed),
       nextPaidMember: '006',
     });
   } catch (error) {
     console.error('Counter initialization failed:', error);
 
     return Response.json(
-      { error: 'Counter initialization failed' },
+      {
+        error: 'Counter initialization failed',
+        detail: error.message,
+      },
       { status: 500 }
     );
   }
