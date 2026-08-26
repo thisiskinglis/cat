@@ -444,17 +444,23 @@ export default function App() {
    * =================================================
    */
 
-  return (
-  <div className="fixed inset-0 w-full h-[100dvh] bg-[#EDEDED] flex justify-center selection:bg-black selection:text-white overflow-hidden">
-    <div className="w-full max-w-[480px] h-[100dvh] bg-white relative flex flex-col shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_20px_80px_rgba(0,0,0,0.12)] overflow-hidden">
+ return (
+  <div className="w-full h-[100dvh] bg-[#EDEDED] flex justify-center selection:bg-black selection:text-white overflow-hidden">
 
-      <Header memberNo={memberNo} />
+    <div className="w-full max-w-[480px] h-full min-h-0 bg-white relative flex flex-col overflow-hidden shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_20px_80px_rgba(0,0,0,0.12)]">
 
+      {/* FIXED APP HEADER */}
+      <div className="shrink-0">
+        <Header memberNo={memberNo} />
+      </div>
+
+      {/* ONLY THE MIDDLE CONTENT SCROLLS */}
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-none scrollbar-none relative bg-white"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-none relative bg-white"
         style={{
           WebkitOverflowScrolling: 'touch',
+          overscrollBehaviorY: 'contain',
           touchAction: 'pan-y',
         }}
       >
@@ -501,10 +507,13 @@ export default function App() {
         </div>
       </div>
 
-      <BottomNav
-        activeTab={activeTab}
-        onNavigate={navigate}
-      />
+      {/* FIXED BOTTOM NAV */}
+      <div className="shrink-0 bg-white">
+        <BottomNav
+          activeTab={activeTab}
+          onNavigate={navigate}
+        />
+      </div>
 
       <Toast message={toast} />
 
