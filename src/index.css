@@ -38,3 +38,100 @@ h1, h2, .syne {
   from { opacity: 0; transform: translateY(12px) translateX(-50%); }
   to { opacity: 1; transform: translateY(0) translateX(-50%); }
 }
+/* =========================================================
+   CRESCITA PWA APP SHELL
+   ========================================================= */
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #ffffff;
+
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+  overscroll-behavior: none;
+
+  background: #ffffff;
+
+  /* Allow vertical app scrolling but disable pinch zoom */
+  touch-action: pan-y;
+
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#root {
+  position: fixed;
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/*
+ * Buttons should feel like app controls,
+ * not browser elements.
+ */
+button,
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Allow selection/typing wherever we later
+ * introduce real text inputs.
+ */
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/*
+ * Prevent images/media being dragged around
+ * like webpage content.
+ */
+img,
+svg {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+/*
+ * Hide browser-style scrollbars while preserving scrolling.
+ */
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
