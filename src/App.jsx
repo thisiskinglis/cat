@@ -18,66 +18,99 @@ export default function App() {
   const scrollRef = useRef(null);
 
   const saveMemberNumber = (number) => {
-  const clean = String(number || '')
-    .replace(/\D/g, '')
-    .slice(0, 4);
+    const clean = String(number || '')
+      .replace(/\D/g, '')
+      .slice(0, 4);
 
-  if (!clean) return false;
+    if (!clean || clean === '859') {
+      return false;
+    }
 
-  setMemberNo(clean);
-  setAccessState('ready');
+    setMemberNo(clean);
+    setAccessState('ready');
 
-  try {
-    localStorage.setItem('collective_member_number', clean);
-  } catch {
-    // Fine — membership will still work for this browser session.
-  }
+    try {
+      localStorage.setItem('collective_member_number', clean);
+    } catch {
+      // Membership will still work for this browser session.
+    }
 
-  return true;
-};
+    return true;
+  };
 
-const loadStoredMemberNumber = () => {
-  try {
-    const stored =
-      localStorage.getItem('collective_member_number') ||
-      localStorage.getItem('member_number');
+  const loadStoredMemberNumber = () => {
+    try {
+      const stored =
+        localStorage.getItem('collective_member_number') ||
+        localStorage.getItem('member_number');
 
-    if (stored) {
-      saveMemberNumber(stored);
-    } else {
+      if (stored && String(stored).replace(/\D/g, '') !== '859') {
+        saveMemberNumber(stored);
+      } else {
+        localStorage.removeItem('collective_member_number');
+        localStorage.removeItem('member_number');
+        setAccessState('unverified');
+      }
+    } catch {
       setAccessState('unverified');
     }
-  } catch {
-    setAccessState('unverified');
-  }
-};
+  };
 
-  // After a Stripe payment, the customer lands back here with
-  // ?session_id=... in the URL. Look that up to get their real,
-  // auto-assigned member number. Otherwise, fall back to whatever
-  // this device already has saved.
+  const activateExecutive = async (memberNo, key) => {
+    try {
+      const res = await fetch('/api/executive-activate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          memberNo,
+          key,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.memberNo) {
+        setAccessState('unverified');
+        return;
+      }
+
+      saveMemberNumber(data.memberNo);
+
+      // Remove the private activation key from the address bar.
+      window.history.replaceState({}, '', window.location.pathname);
+    } catch {
+      setAccessState('unverified');
+    }
+  };
+
+  // After Stripe checkout, retrieve the member number assigned
+  // by the webhook. Retry briefly if Stripe's webhook is still processing.
   const lookupMemberNumber = async (sessionId, attempt = 1) => {
     try {
-      const res = await fetch(`/api/member?session_id=${sessionId}`);
+      const res = await fetch(
+        `/api/member?session_id=${encodeURIComponent(sessionId)}`
+      );
+
       const data = await res.json();
 
       if (data.memberNo) {
-        setMemberNo(data.memberNo);
-        try {
-          localStorage.setItem('collective_member_number', data.memberNo);
-        } catch {
-          // localStorage may be unavailable (private browsing, etc) — fine,
-          // the number still shows for this session.
-        }
-        // Remove session_id from the URL so it isn't reused or bookmarked.
+        saveMemberNumber(data.memberNo);
+
+        // Remove session_id so it cannot be reused/bookmarked.
         window.history.replaceState({}, '', window.location.pathname);
-      } else if (data.pending && attempt < 5) {
-        // The webhook may still be processing — retry briefly before
-        // giving up and falling back to local storage.
-        setTimeout(() => lookupMemberNumber(sessionId, attempt + 1), 1500);
-      } else {
-        loadStoredMemberNumber();
+        return;
       }
+
+      if (data.pending && attempt < 5) {
+        setTimeout(() => {
+          lookupMemberNumber(sessionId, attempt + 1);
+        }, 1500);
+        return;
+      }
+
+      loadStoredMemberNumber();
     } catch {
       loadStoredMemberNumber();
     }
@@ -87,11 +120,24 @@ const loadStoredMemberNumber = () => {
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get('session_id');
 
+    const hashParams = new URLSearchParams(
+      window.location.hash.replace(/^#/, '')
+    );
+
+    const executiveMember = hashParams.get('exec');
+    const executiveKey = hashParams.get('key');
+
+    if (executiveMember && executiveKey) {
+      activateExecutive(executiveMember, executiveKey);
+      return;
+    }
+
     if (sessionId) {
       lookupMemberNumber(sessionId);
-    } else {
-      loadStoredMemberNumber();
+      return;
     }
+
+    loadStoredMemberNumber();
   }, []);
 
   const showToast = (message, duration = 2200) => {
@@ -100,15 +146,24 @@ const loadStoredMemberNumber = () => {
   };
 
   const scrollToTop = () => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollRef.current?.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
   };
 
   const navigate = (tab) => {
     if (tab === activeTab) {
       scrollToTop();
-      showToast(tab === 'home' ? 'Already on Home' : `You are on ${tab}`, 1500);
+      showToast(
+        tab === 'home'
+          ? 'Already on Home'
+          : `You are on ${tab}`,
+        1500
+      );
       return;
     }
+
     setPrevTab(activeTab);
     setActiveTab(tab);
     scrollToTop();
@@ -118,13 +173,52 @@ const loadStoredMemberNumber = () => {
     try {
       await navigator.clipboard.writeText('COLLECTIVE15');
     } catch {
-      // Clipboard may be unavailable (unsupported browser, no permission, etc).
+      // Clipboard may be unavailable.
     }
+
     setCopied(true);
     setToast('Code COLLECTIVE15 copied');
+
     setTimeout(() => setToast(null), 2000);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (accessState === 'loading') {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-6">
+        <div className="text-center">
+          <p className="text-xs tracking-[0.18em] uppercase text-black/40">
+            Crescita Collective
+          </p>
+
+          <p className="mt-3 text-sm font-medium">
+            Activating membership…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessState === 'unverified') {
+    return (
+      <div className="min-h-screen bg-[#EDEDED] flex items-center justify-center px-6">
+        <div className="w-full max-w-[420px] bg-white p-8 text-center">
+          <p className="text-[11px] tracking-[0.18em] uppercase text-black/40">
+            Crescita Collective
+          </p>
+
+          <h1 className="mt-4 text-2xl font-semibold">
+            Membership activation required
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-black/60">
+            Open your membership confirmation link to activate
+            the Collective on this device.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full bg-[#EDEDED] flex justify-center selection:bg-black selection:text-white overflow-x-hidden">
@@ -139,12 +233,29 @@ const loadStoredMemberNumber = () => {
             key={activeTab}
             className="min-h-full"
             style={{
-              animation: `${prevTab !== activeTab ? 'slideUp' : 'fadeIn'} 0.38s cubic-bezier(0.16,1,0.3,1)`,
+              animation: `${
+                prevTab !== activeTab ? 'slideUp' : 'fadeIn'
+              } 0.38s cubic-bezier(0.16,1,0.3,1)`,
             }}
           >
-            {activeTab === 'home' && <HomeView memberNo={memberNo} onAction={showToast} />}
-            {activeTab === 'card' && <CardView memberNo={memberNo} onAction={showToast} />}
-            {activeTab === 'programmes' && <ProgrammesView onAction={showToast} />}
+            {activeTab === 'home' && (
+              <HomeView
+                memberNo={memberNo}
+                onAction={showToast}
+              />
+            )}
+
+            {activeTab === 'card' && (
+              <CardView
+                memberNo={memberNo}
+                onAction={showToast}
+              />
+            )}
+
+            {activeTab === 'programmes' && (
+              <ProgrammesView onAction={showToast} />
+            )}
+
             {activeTab === 'perks' && (
               <PerksView
                 copied={copied}
@@ -157,7 +268,10 @@ const loadStoredMemberNumber = () => {
           </div>
         </div>
 
-        <BottomNav activeTab={activeTab} onNavigate={navigate} />
+        <BottomNav
+          activeTab={activeTab}
+          onNavigate={navigate}
+        />
 
         <Toast message={toast} />
       </div>
