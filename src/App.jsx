@@ -7,28 +7,50 @@ import CardView from './views/CardView';
 import ProgrammesView from './views/ProgrammesView';
 import PerksView from './views/PerksView';
 
-const DEFAULT_MEMBER_NO = '859';
-
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [prevTab, setPrevTab] = useState('home');
-  const [memberNo, setMemberNo] = useState(DEFAULT_MEMBER_NO);
+  const [memberNo, setMemberNo] = useState(null);
+  const [accessState, setAccessState] = useState('loading');
   const [copied, setCopied] = useState(false);
   const [notifOn, setNotifOn] = useState(true);
   const [toast, setToast] = useState(null);
   const scrollRef = useRef(null);
 
-  const loadStoredMemberNumber = () => {
-    try {
-      const stored =
-        localStorage.getItem('collective_member_number') ||
-        localStorage.getItem('member_number') ||
-        DEFAULT_MEMBER_NO;
-      setMemberNo(stored.replace(/\D/g, '').slice(0, 4) || DEFAULT_MEMBER_NO);
-    } catch {
-      setMemberNo(DEFAULT_MEMBER_NO);
+  const saveMemberNumber = (number) => {
+  const clean = String(number || '')
+    .replace(/\D/g, '')
+    .slice(0, 4);
+
+  if (!clean) return false;
+
+  setMemberNo(clean);
+  setAccessState('ready');
+
+  try {
+    localStorage.setItem('collective_member_number', clean);
+  } catch {
+    // Fine — membership will still work for this browser session.
+  }
+
+  return true;
+};
+
+const loadStoredMemberNumber = () => {
+  try {
+    const stored =
+      localStorage.getItem('collective_member_number') ||
+      localStorage.getItem('member_number');
+
+    if (stored) {
+      saveMemberNumber(stored);
+    } else {
+      setAccessState('unverified');
     }
-  };
+  } catch {
+    setAccessState('unverified');
+  }
+};
 
   // After a Stripe payment, the customer lands back here with
   // ?session_id=... in the URL. Look that up to get their real,
