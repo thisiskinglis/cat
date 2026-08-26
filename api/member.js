@@ -1,40 +1,87 @@
-// Given a Stripe Checkout session_id (from the post-payment redirect URL),
-// looks up which customer paid and returns their assigned member number.
 import Stripe from 'stripe';
-import { Redis } from '@upstash/redis';
+import { Redis } from '@upstash/redis/cloudflare';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const redis = Redis.fromEnv();
+export default async function handleMember(request, env) {
+  if (request.method !== 'GET') {
+    return Response.json(
+      { error: 'Method not allowed' },
+      { status: 405 }
+    );
+  }
 
-export default async function handler(req, res) {
-  const { session_id: sessionId } = req.query;
+  const url = new URL(request.url);
+  const sessionId = url.searchParams.get('session_id');
 
   if (!sessionId) {
-    res.status(400).json({ error: 'Missing session_id' });
-    return;
+    return Response.json(
+      { error: 'Missing session_id' },
+      { status: 400 }
+    );
   }
+
+  if (
+    !env.STRIPE_SECRET_KEY ||
+    !env.KV_REST_API_URL ||
+    !env.KV_REST_API_TOKEN
+  ) {
+    console.error('Missing Stripe or Upstash environment variables');
+
+    return Response.json(
+      { error: 'Server configuration error' },
+      { status: 500 }
+    );
+  }
+
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+    httpClient: Stripe.createFetchHttpClient(),
+  });
+
+  const redis = new Redis({
+    url: env.KV_REST_API_URL,
+    token: env.KV_REST_API_TOKEN,
+  });
 
   try {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    const customerId = session.customer;
+
+    const customerId =
+      typeof session.customer === 'string'
+        ? session.customer
+        : session.customer?.id;
 
     if (!customerId) {
-      res.status(404).json({ error: 'No customer on this session' });
-      return;
+      return Response.json(
+        { error: 'No customer on this session' },
+        { status: 404 }
+      );
     }
 
-    const memberNo = await redis.get(`member:${customerId}`);
+    // Keep Stripe TEST members completely separate from LIVE members.
+    const prefix = session.livemode ? '' : 'test:';
+
+    const memberNo = await redis.get(
+      `${prefix}member:${customerId}`
+    );
 
     if (!memberNo) {
-      // The webhook may not have finished processing yet — tell the
-      // browser it's still pending so it can retry in a moment.
-      res.status(202).json({ pending: true });
-      return;
+      // Stripe webhook may still be processing.
+      // Your React app already retries this automatically.
+      return Response.json(
+        { pending: true },
+        { status: 202 }
+      );
     }
 
-    res.status(200).json({ memberNo });
+    return Response.json(
+      { memberNo: String(memberNo) },
+      { status: 200 }
+    );
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not look up member number' });
+    console.error('Member lookup failed:', err);
+
+    return Response.json(
+      { error: 'Could not look up member number' },
+      { status: 500 }
+    );
   }
 }
