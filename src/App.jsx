@@ -200,25 +200,28 @@ export default function App() {
   }
 
   if (accessState === 'unverified') {
-    return (
-      <div className="min-h-screen bg-[#EDEDED] flex items-center justify-center px-6">
-        <div className="w-full max-w-[420px] bg-white p-8 text-center">
-          <p className="text-[11px] tracking-[0.18em] uppercase text-black/40">
-            Crescita Collective
-          </p>
-
-          <h1 className="mt-4 text-2xl font-semibold">
-            Membership activation required
-          </h1>
-
-          <p className="mt-3 text-sm leading-6 text-black/60">
-            Open your membership confirmation link to activate
-            the Collective on this device.
-          </p>
+  return (
+    <div className="min-h-screen bg-white flex items-center justify-center px-6">
+      <div className="w-full max-w-[420px] flex flex-col items-center justify-center text-center">
+        
+        <div
+          className="text-[22px] font-semibold tracking-[0.22em] text-black"
+          style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+        >
+          CRESCITA
         </div>
+
+        <a
+          href="https://buy.stripe.com/8x2cN615R9gPeVFb2i3oA0j"
+          className="mt-14 inline-flex items-center justify-center min-w-[210px] h-[54px] px-8 rounded-full bg-black text-white text-[11px] font-semibold tracking-[0.16em] uppercase transition-transform active:scale-[0.98]"
+        >
+          Join the Collective
+        </a>
+
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen w-full bg-[#EDEDED] flex justify-center selection:bg-black selection:text-white overflow-x-hidden">
