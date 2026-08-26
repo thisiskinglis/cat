@@ -30,6 +30,16 @@ window.addEventListener('appinstalled', () => {
     // Ignore storage errors.
   }
 });
+// Prevent multi-touch pinch zoom inside the installed PWA.
+document.addEventListener(
+  'touchmove',
+  (event) => {
+    if (event.touches && event.touches.length > 1) {
+      event.preventDefault();
+    }
+  },
+  { passive: false }
+);
 
 ReactDOM.createRoot(
   document.getElementById('root')
