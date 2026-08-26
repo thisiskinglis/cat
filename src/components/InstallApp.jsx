@@ -4,22 +4,34 @@ export default function InstallApp({
   memberNo,
   onContinue,
 }) {
-  const [installPrompt, setInstallPrompt] =
-    useState(() => window.crescitaInstallPrompt || null);
+  const [installPrompt, setInstallPrompt] = useState(
+    () => window.crescitaInstallPrompt || null
+  );
 
-  const [showIOSHelp, setShowIOSHelp] =
-    useState(false);
+  const [instructionMode, setInstructionMode] =
+    useState(null);
 
   const isStandalone =
-    window.matchMedia?.(
-      '(display-mode: standalone)'
-    )?.matches ||
+    window.matchMedia?.('(display-mode: standalone)')?.matches ||
     window.navigator.standalone === true;
 
   const isIOS =
-    /iphone|ipad|ipod/i.test(
-      window.navigator.userAgent
+    /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
+    (
+      /Macintosh/i.test(window.navigator.userAgent) &&
+      window.navigator.maxTouchPoints > 1
     );
+
+  const wasInstalled = (() => {
+    try {
+      return (
+        localStorage.getItem('crescita_pwa_installed') ===
+        'true'
+      );
+    } catch {
+      return false;
+    }
+  })();
 
   useEffect(() => {
     const handleInstallReady = () => {
@@ -28,9 +40,29 @@ export default function InstallApp({
       );
     };
 
+    const handleInstalled = () => {
+      setInstallPrompt(null);
+
+      try {
+        localStorage.setItem(
+          'crescita_pwa_installed',
+          'true'
+        );
+      } catch {
+        // Ignore storage errors.
+      }
+
+      onContinue();
+    };
+
     window.addEventListener(
       'crescita-install-ready',
       handleInstallReady
+    );
+
+    window.addEventListener(
+      'appinstalled',
+      handleInstalled
     );
 
     return () => {
@@ -38,8 +70,13 @@ export default function InstallApp({
         'crescita-install-ready',
         handleInstallReady
       );
+
+      window.removeEventListener(
+        'appinstalled',
+        handleInstalled
+      );
     };
-  }, []);
+  }, [onContinue]);
 
   const markSeen = () => {
     try {
@@ -59,20 +96,21 @@ export default function InstallApp({
 
   const handleInstall = async () => {
     /*
-     * Already launched as an installed PWA.
+     * App is already running as an installed PWA.
      */
-    if (isStandalone) {
+    if (isStandalone || wasInstalled) {
       markSeen();
       onContinue();
       return;
     }
 
     /*
-     * iOS does not expose beforeinstallprompt.
-     * Installation happens via the Share menu.
+     * iPhone / iPad:
+     * Apple uses Add to Home Screen rather than
+     * beforeinstallprompt.
      */
     if (isIOS) {
-      setShowIOSHelp(true);
+      setInstructionMode('ios');
       return;
     }
 
@@ -91,25 +129,33 @@ export default function InstallApp({
 
         if (choice?.outcome === 'accepted') {
           markSeen();
-          onContinue();
+
+          /*
+           * appinstalled normally fires afterwards.
+           * This fallback ensures we don't trap the user.
+           */
+          setTimeout(() => {
+            onContinue();
+          }, 800);
         }
       } catch {
-        // User can still continue into the app.
+        setInstructionMode('browser');
       }
 
       return;
     }
 
     /*
-     * Browser doesn't expose a native prompt,
-     * or it isn't available yet.
+     * Browser supports installation but hasn't supplied
+     * a programmable prompt, so give manual instructions.
      */
-    setShowIOSHelp(true);
+    setInstructionMode('browser');
   };
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-6">
       <div className="w-full max-w-[420px] text-center">
+
         <div className="syne font-[800] tracking-[0.18em] text-[20px]">
           CRESCITA
         </div>
@@ -123,12 +169,12 @@ export default function InstallApp({
         </h1>
 
         <p className="mt-5 text-[14px] leading-6 text-black/55 max-w-[310px] mx-auto">
-          Add the Collective to your phone for
-          direct access to your membership,
-          programmes and member benefits.
+          Add the Collective to your phone for direct
+          access to your membership, programmes and
+          member benefits.
         </p>
 
-        {!showIOSHelp && (
+        {!instructionMode && (
           <>
             <button
               type="button"
@@ -148,17 +194,17 @@ export default function InstallApp({
           </>
         )}
 
-        {showIOSHelp && (
+        {instructionMode === 'ios' && (
           <div className="mt-10 border border-black/[0.08] rounded-[24px] p-6">
+
             <p className="syne text-[18px] font-[700]">
               Add to your Home Screen
             </p>
 
             <p className="mt-4 text-[13px] leading-6 text-black/60">
-              Tap the browser
-              <strong> Share </strong>
-              button, then choose
-              <strong> Add to Home Screen</strong>.
+              Tap the <strong>Share</strong> button in
+              your browser, then choose{' '}
+              <strong>Add to Home Screen</strong>.
             </p>
 
             <button
@@ -168,8 +214,34 @@ export default function InstallApp({
             >
               Continue
             </button>
+
           </div>
         )}
+
+        {instructionMode === 'browser' && (
+          <div className="mt-10 border border-black/[0.08] rounded-[24px] p-6">
+
+            <p className="syne text-[18px] font-[700]">
+              Install the Collective
+            </p>
+
+            <p className="mt-4 text-[13px] leading-6 text-black/60">
+              Open your browser menu and choose{' '}
+              <strong>Install app</strong> or{' '}
+              <strong>Add to Home Screen</strong>.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleContinue}
+              className="mt-6 w-full h-[50px] rounded-full bg-black text-white text-[11px] font-[700] tracking-[0.12em] uppercase"
+            >
+              Continue
+            </button>
+
+          </div>
+        )}
+
       </div>
     </div>
   );
