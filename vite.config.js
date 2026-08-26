@@ -17,7 +17,7 @@ export default defineConfig({
 
       manifest: {
         name: 'CRESCITA COLLECTIVE',
-        short_name: 'Collective',
+        short_name: 'CRESCITA',
         description:
           'CRESCITA COLLECTIVE — By Grace We Grow.',
 
