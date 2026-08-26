@@ -18,8 +18,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const scrollRef = useRef(null);
 
-  // Load a persisted member number, falling back to the default.
-  useEffect(() => {
+  const loadStoredMemberNumber = () => {
     try {
       const stored =
         localStorage.getItem('collective_member_number') ||
@@ -28,6 +27,48 @@ export default function App() {
       setMemberNo(stored.replace(/\D/g, '').slice(0, 4) || DEFAULT_MEMBER_NO);
     } catch {
       setMemberNo(DEFAULT_MEMBER_NO);
+    }
+  };
+
+  // After a Stripe payment, the customer lands back here with
+  // ?session_id=... in the URL. Look that up to get their real,
+  // auto-assigned member number. Otherwise, fall back to whatever
+  // this device already has saved.
+  const lookupMemberNumber = async (sessionId, attempt = 1) => {
+    try {
+      const res = await fetch(`/api/member?session_id=${sessionId}`);
+      const data = await res.json();
+
+      if (data.memberNo) {
+        setMemberNo(data.memberNo);
+        try {
+          localStorage.setItem('collective_member_number', data.memberNo);
+        } catch {
+          // localStorage may be unavailable (private browsing, etc) — fine,
+          // the number still shows for this session.
+        }
+        // Remove session_id from the URL so it isn't reused or bookmarked.
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (data.pending && attempt < 5) {
+        // The webhook may still be processing — retry briefly before
+        // giving up and falling back to local storage.
+        setTimeout(() => lookupMemberNumber(sessionId, attempt + 1), 1500);
+      } else {
+        loadStoredMemberNumber();
+      }
+    } catch {
+      loadStoredMemberNumber();
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+
+    if (sessionId) {
+      lookupMemberNumber(sessionId);
+    } else {
+      loadStoredMemberNumber();
     }
   }, []);
 
