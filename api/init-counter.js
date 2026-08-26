@@ -6,14 +6,19 @@ export default async function handleInitCounter(request, env) {
     );
   }
 
-  const suppliedKey = request.headers.get('x-setup-key');
-
   if (!env.COUNTER_SETUP_KEY || suppliedKey !== env.COUNTER_SETUP_KEY) {
-    return Response.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
-  }
+  return Response.json(
+    {
+      error: 'Unauthorized',
+      headerPresent: Boolean(suppliedKey),
+      headerLength: suppliedKey?.length ?? 0,
+      envPresent: Boolean(env.COUNTER_SETUP_KEY),
+      envLength: env.COUNTER_SETUP_KEY?.length ?? 0,
+      matches: suppliedKey === env.COUNTER_SETUP_KEY
+    },
+    { status: 401 }
+  );
+}
 
   if (!env.KV_REST_API_URL || !env.KV_REST_API_TOKEN) {
     return Response.json(
