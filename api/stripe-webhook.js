@@ -1,8 +1,8 @@
 // Catches Stripe events. When a subscription checkout completes for the
 // first time for a given customer, it assigns the next sequential member
-// number and stores it in Vercel KV, keyed by Stripe customer ID.
+// number and stores it in Upstash Redis, keyed by Stripe customer ID.
 import Stripe from 'stripe';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 
 // Stripe needs the raw, untouched request body to verify the signature —
 // so we turn off Vercel's automatic JSON body parsing for this route.
@@ -13,6 +13,7 @@ export const config = {
 };
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const redis = Redis.fromEnv();
 
 function buffer(readable) {
   return new Promise((resolve, reject) => {
@@ -48,11 +49,11 @@ export default async function handler(req, res) {
     if (customerId) {
       // Only hand out a number the first time we see this customer —
       // renewals hit this same webhook event but shouldn't get a new one.
-      const existing = await kv.get(`member:${customerId}`);
+      const existing = await redis.get(`member:${customerId}`);
       if (!existing) {
-        const nextNumber = await kv.incr('member-counter');
+        const nextNumber = await redis.incr('member-counter');
         const memberNo = String(nextNumber).padStart(3, '0');
-        await kv.set(`member:${customerId}`, memberNo);
+        await redis.set(`member:${customerId}`, memberNo);
       }
     }
   }
