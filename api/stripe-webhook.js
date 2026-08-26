@@ -1,62 +1,150 @@
-// Catches Stripe events. When a subscription checkout completes for the
-// first time for a given customer, it assigns the next sequential member
-// number and stores it in Upstash Redis, keyed by Stripe customer ID.
 import Stripe from 'stripe';
-import { Redis } from '@upstash/redis';
+import { Redis } from '@upstash/redis/cloudflare';
 
-// Stripe needs the raw, untouched request body to verify the signature —
-// so we turn off Vercel's automatic JSON body parsing for this route.
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+const ASSIGN_MEMBER_NUMBER = `
+  local existing = redis.call('GET', KEYS[1])
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const redis = Redis.fromEnv();
+  if existing then
+    return existing
+  end
 
-function buffer(readable) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    readable.on('data', (chunk) => chunks.push(chunk));
-    readable.on('end', () => resolve(Buffer.concat(chunks)));
-    readable.on('error', reject);
-  });
-}
+  local nextNumber = redis.call('INCR', KEYS[2])
+  local memberNo = string.format('%03d', nextNumber)
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method not allowed');
-    return;
+  redis.call('SET', KEYS[1], memberNo)
+
+  return memberNo
+`;
+
+export default async function handleStripeWebhook(request, env) {
+  if (request.method !== 'POST') {
+    return new Response(
+      'Method not allowed',
+      { status: 405 }
+    );
   }
 
-  const signature = req.headers['stripe-signature'];
-  const rawBody = await buffer(req);
+  if (
+    !env.STRIPE_SECRET_KEY ||
+    !env.STRIPE_WEBHOOK_SECRET ||
+    !env.KV_REST_API_URL ||
+    !env.KV_REST_API_TOKEN
+  ) {
+    console.error('Missing Stripe or Upstash environment variables');
+
+    return new Response(
+      'Server configuration error',
+      { status: 500 }
+    );
+  }
+
+  const signature = request.headers.get('stripe-signature');
+
+  if (!signature) {
+    return new Response(
+      'Missing Stripe signature',
+      { status: 400 }
+    );
+  }
+
+  // Stripe MUST receive the original raw request body
+  // for webhook signature verification.
+  const rawBody = await request.text();
+
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+    httpClient: Stripe.createFetchHttpClient(),
+  });
 
   let event;
+
   try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
+    event = await stripe.webhooks.constructEventAsync(
+      rawBody,
+      signature,
+      env.STRIPE_WEBHOOK_SECRET,
+      undefined,
+      Stripe.createSubtleCryptoProvider()
+    );
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
-    res.status(400).send(`Webhook Error: ${err.message}`);
-    return;
+    console.error(
+      'Webhook signature verification failed:',
+      err.message
+    );
+
+    return new Response(
+      `Webhook Error: ${err.message}`,
+      { status: 400 }
+    );
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const customerId = session.customer;
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
 
-    if (customerId) {
-      // Only hand out a number the first time we see this customer —
-      // renewals hit this same webhook event but shouldn't get a new one.
-      const existing = await redis.get(`member:${customerId}`);
-      if (!existing) {
-        const nextNumber = await redis.incr('member-counter');
-        const memberNo = String(nextNumber).padStart(3, '0');
-        await redis.set(`member:${customerId}`, memberNo);
+      const customerId =
+        typeof session.customer === 'string'
+          ? session.customer
+          : session.customer?.id;
+
+      if (customerId) {
+        const redis = new Redis({
+          url: env.KV_REST_API_URL,
+          token: env.KV_REST_API_TOKEN,
+        });
+
+        /*
+         * IMPORTANT:
+         *
+         * Test Stripe memberships and real memberships use
+         * completely separate counters.
+         *
+         * This prevents our testing from consuming real
+         * Crescita member numbers.
+         */
+        const prefix = event.livemode ? '' : 'test:';
+
+        const memberKey =
+          `${prefix}member:${customerId}`;
+
+        const counterKey =
+          `${prefix}member-counter`;
+
+        /*
+         * Run the check + increment + assignment atomically
+         * inside Redis.
+         *
+         * This means two webhook requests cannot allocate
+         * conflicting member numbers.
+         */
+        const memberNo = await redis.eval(
+          ASSIGN_MEMBER_NUMBER,
+          [memberKey, counterKey],
+          []
+        );
+
+        console.log(
+          `Member ${memberNo} assigned to ${customerId}`
+        );
       }
     }
-  }
 
-  res.status(200).json({ received: true });
+    return Response.json({
+      received: true,
+    });
+  } catch (err) {
+    console.error(
+      'Webhook processing failed:',
+      err
+    );
+
+    /*
+     * Returning 500 is deliberate.
+     * Stripe can retry the webhook rather than us silently
+     * losing the member assignment.
+     */
+    return new Response(
+      'Webhook processing failed',
+      { status: 500 }
+    );
+  }
 }
