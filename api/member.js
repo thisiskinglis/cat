@@ -1,9 +1,10 @@
 // Given a Stripe Checkout session_id (from the post-payment redirect URL),
 // looks up which customer paid and returns their assigned member number.
 import Stripe from 'stripe';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
   const { session_id: sessionId } = req.query;
@@ -22,7 +23,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const memberNo = await kv.get(`member:${customerId}`);
+    const memberNo = await redis.get(`member:${customerId}`);
 
     if (!memberNo) {
       // The webhook may not have finished processing yet — tell the
